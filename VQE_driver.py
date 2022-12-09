@@ -17,6 +17,8 @@ Created on Tue Dec  7 15:57:44 2021
 import pickle
 import time
 #from statsmodels.stats.weightstats import DescrStatsW
+from math import log
+
 import scipy.sparse as sp
 
 from decompose_pauli import to_pauli_vec
@@ -39,6 +41,7 @@ from qiskit.tools.visualization import circuit_drawer
 from qiskit import QuantumCircuit
 
 from rmatrix import random_H
+from timing import timing
 
 from Psfam import *
 
@@ -51,15 +54,23 @@ from qiskit.opflow.primitive_ops.pauli_sum_op import PauliSumOp
 
 def array_to_Op(H):
     "Convert numpy matrix to qiskit Operator type object."
-    pauli_vec = to_pauli_vec(H)
     
-    H_op=PauliOp(Pauli(label='III'),0.0)
-    print(type(H_op))
+    N = H.shape[0]
+    m = log(N, 2)
+    assert m == int(m)
+    m = int(m)
+
+    pauli_vec = to_pauli_vec(H)
+    print(pauli_vec)
+    print(len(pauli_vec))
+    
+    H_op=PauliOp(Pauli(label='I'*m),0.0)
+    #print(type(H_op))
     for pauli_string in pauli_vec.keys():
         coefficient = pauli_vec[pauli_string]
         #if(abs(coefficient) > 0.0001 ):
         H_op += PauliOp(Pauli(label=pauli_string),coefficient)
-    print(type(H_op))
+    #print(type(H_op))
     return H_op
 
 def test_ben():
@@ -118,6 +129,56 @@ def array_to_SummedOp(Hmat, m):
 
     return result
 
+def run_VQE(H):
+    seed = (int) (10000*np.random.rand()) 
+    iterations = 200
+    algorithm_globals.random_seed = seed
+    backend = Aer.get_backend('aer_simulator')
+    qi = QuantumInstance(backend=backend, shots=10000, seed_simulator=seed, seed_transpiler=seed)
+
+    counts = []
+    values = []
+    devs = []
+        
+    def store_intermediate_result(eval_count, parameters, mean, std):
+        counts.append(eval_count)
+        values.append(mean)
+        devs.append(std)
+
+    ansatz =  TwoLocal(3,rotation_blocks='ry', entanglement_blocks='cz',entanglement='full',reps=2)
+    #ansatz = EfficientSU2(3, su2_gates=['ry', 'x'], entanglement='full', reps=2)
+    #circuit_drawer(ansatz, output='mpl', style={'backgroundcolor': '#EEEEEE'})
+    #print(ansatz.num_parameters)
+    #ansatz =  TwoLocal(rotation_blocks='ry', entanglement_blocks='cz',entanglement='full',reps=2)
+ 
+    #spsa = SPSA(maxiter=iterations,learning_rate=0.02,perturbation=0.3)
+ 
+    spsa = COBYLA(maxiter=iterations,rhobeg=0.2)
+
+    vqe = VQE(ansatz, optimizer=spsa, callback=store_intermediate_result,quantum_instance=qi)
+    result = vqe.compute_minimum_eigenvalue(operator=H)
+
+    return result
+
+def main2(m):
+    N = 2**m
+    Hmat = random_H(N)
+    
+    H = array_to_Op(Hmat)
+    #with timing():
+    #    result = run_VQE(H)
+    
+    
+    #grouper = AbelianGrouper()
+    #H = grouper.convert(H)
+    #with timing():
+    #    result = run_VQE(H)
+    
+    H = array_to_SummedOp(Hmat, m)
+    with timing():
+        result = run_VQE(H)
+    
+
 def main():
     iters=2
     m = 3
@@ -135,17 +196,13 @@ def main():
     print("# of Pauli-Strings: ",len(pauli_vec))
 
      # of Is = log_2(M)
- 
-    H=PauliOp(Pauli(label='III'),0.0)
-    for pauli_string in pauli_vec.keys():
-        coefficient = pauli_vec[pauli_string]
     
-        #if(abs(coefficient) > 0.0001 ):
-        H += PauliOp(Pauli(label=pauli_string),coefficient)
-     
+    H = array_to_Op(Hmat)
+    
     #print("# of Pauli-Strings: ",H)
     t1=time.time()    
-    grouper = NewAbelianGrouper()
+    #grouper = NewAbelianGrouper()
+    grouper = AbelianGrouper()
  
     #H = grouper.convert(H)    
  
@@ -202,5 +259,6 @@ def main():
 
 if __name__ == "__main__":
     #main()
-    test_ben()
+    main2(3)
+    #test_ben()
 
