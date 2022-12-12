@@ -18,6 +18,9 @@ import pickle
 import time
 #from statsmodels.stats.weightstats import DescrStatsW
 from math import log
+import logging
+import cProfile
+import pstats
 
 import scipy.sparse as sp
 
@@ -31,6 +34,10 @@ from qiskit.algorithms import VQE
 from qiskit.algorithms.optimizers import SPSA,COBYLA
 from qiskit.circuit.library import TwoLocal,EfficientSU2
 from qiskit.opflow.converters import AbelianGrouper #, NewAbelianGrouper
+logger = logging.getLogger(__name__)
+fh = logging.FileHandler('vqe.log')
+fh.setLevel(logging.DEBUG)
+logger.addHandler(fh)
 #from qiskit.circuit.library import RealAmplitudes
 
 from qiskit.opflow.primitive_ops import PauliOp
@@ -61,8 +68,8 @@ def array_to_Op(H):
     m = int(m)
 
     pauli_vec = to_pauli_vec(H)
-    print(pauli_vec)
-    print(len(pauli_vec))
+    #print(pauli_vec)
+    #print(len(pauli_vec))
     
     H_op=PauliOp(Pauli(label='I'*m),0.0)
     #print(type(H_op))
@@ -87,9 +94,13 @@ def test_ben():
     print('len(result):', len(result))
 
 def array_to_SummedOp(Hmat, m):
+    "Convert numpy matrix to SummedOp grouped into Pauli-string families."
     PO = Pauli_organizer(m)
     pauli_vec = to_pauli_vec(Hmat)
-    pauli_vec['III'] = 0  # This is in Ben's code, but not Nouman's..
+    #pauli_vec['III'] = 0  # This is in Ben's code, but not Nouman's..
+    #pauli_vec['II'] = 0
+    #pauli_vec['IIII'] = 0
+    pauli_vec['IIIII'] = 0
     #print(pauli_vec)
     PO.input_pauli_decomps(pauli_vec)
     f = PO.calc_coefficients()
@@ -97,9 +108,11 @@ def array_to_SummedOp(Hmat, m):
 
     H = array_to_Op(Hmat)
     primitive = H.primitive
-    print('primitive:', primitive)
+    #print('primitive:', primitive)
+    #print('paulis:', primitive.paulis)
     
     # How stored in Op objects.
+    '''
     id_list = \
     ['III', 'IIZ', 'IIX', 'IIY', 'IZI', 'IZZ', 'IZX', 'IZY', 'IXI', 'IXZ', 'IXX', 'IXY', 
     'IYI', 'IYZ', 'IYX', 'IYY', 'ZII', 'ZIZ', 'ZIX', 'ZIY', 'ZZI', 'ZZZ', 'ZZX', 'ZZY', 
@@ -107,31 +120,34 @@ def array_to_SummedOp(Hmat, m):
     'XZI', 'XZZ', 'XZX', 'XZY', 'XXI', 'XXZ', 'XXX', 'XXY', 'XYI', 'XYZ', 'XYX', 'XYY', 
     'YII', 'YIZ', 'YIX', 'YIY', 'YZI', 'YZZ', 'YZX', 'YZY', 'YXI', 'YXZ', 'YXX', 'YXY', 
     'YYI', 'YYZ', 'YYX', 'YYY']
-    id_dict = { id_list[x]: x for x in range(64)}
-    print('id_dict:', id_dict)
-
+    '''
+    # Will primitive.paulis include the full set irrespective of H?
+    id_list = [str(x) for x in primitive.paulis]
+    id_dict = { id_list[x]: x for x in range(len(id_list))}
+    #print('id_dict:', id_dict)
+    
     # How is III treated everywhere? make sure you understand this in detail..
     res = []
     for family in f:
-        print(family.to_string())
+        #print(family.to_string())
         fam_ids = []
         for op in family.to_string():
             fam_ids.append(id_dict[op])
         res.append(fam_ids)
-    print('res:', res)
+    #print('res:', res)
     
     result = SummedOp(
         [PauliSumOp(primitive[group], grouping_type="TPB") for group in res],
         coeff=1)
 
-    print('result:', result)
-    print('len(result):', len(result))
+    #print('result:', result)
+    #print('len(result):', len(result))
 
     return result
 
 def run_VQE(H):
     seed = (int) (10000*np.random.rand()) 
-    iterations = 200
+    iterations = 50
     algorithm_globals.random_seed = seed
     backend = Aer.get_backend('aer_simulator')
     qi = QuantumInstance(backend=backend, shots=10000, seed_simulator=seed, seed_transpiler=seed)
@@ -161,23 +177,49 @@ def run_VQE(H):
     return result
 
 def main2(m):
+    run_naive = False
+    run_abelian = False
+    run_new = True
+
     N = 2**m
     Hmat = random_H(N)
     
+    evals,evec = np.linalg.eigh(Hmat)
+    ref_value=evals[0]
+    print("Exact value: ",evals[0])
+    
     H = array_to_Op(Hmat)
-    #with timing():
-    #    result = run_VQE(H)
+   
+    if run_naive:
+        print('type(H):', type(H))
+        print('# of families:', len(H))
+        with timing():
+            result = run_VQE(H)
     
     
-    #grouper = AbelianGrouper()
-    #H = grouper.convert(H)
-    #with timing():
-    #    result = run_VQE(H)
+    if run_abelian:
+        print('#### VQE using AbelianGrouper ####')
+        grouper = AbelianGrouper()
+        H = grouper.convert(H)
+        print('type(H):', type(H))
+        print('# of families:', len(H))
+        with timing():
+            result = run_VQE(H)
+        print(f'VQE on aer simulator (no noise): {result.eigenvalue.real:.5f}')
+        #print(f'Std Dev of VQE value: {devs[-1]:.5f}')
+        print(f'Delta from reference energy value is {(result.eigenvalue.real - ref_value):.5f}')
     
-    H = array_to_SummedOp(Hmat, m)
-    with timing():
-        result = run_VQE(H)
     
+    if run_new:
+        print('\n\n#### VQE using NewAbelianGrouper ####')
+        H = array_to_SummedOp(Hmat, m)
+        print('type(H):', type(H))
+        print('# of families:', len(H))
+        with timing():
+            result = run_VQE(H)
+        print(f'VQE on aer simulator (no noise): {result.eigenvalue.real:.5f}')
+        print(f'Delta from reference energy value is {(result.eigenvalue.real - ref_value):.5f}')
+   
 
 def main():
     iters=2
@@ -259,6 +301,11 @@ def main():
 
 if __name__ == "__main__":
     #main()
-    main2(3)
+    pr = cProfile.Profile()
+    pr.enable()
+    main2(5)
+    pr.disable()
+    ps = pstats.Stats(pr).sort_stats('cumulative')
+    ps.print_stats()
     #test_ben()
 
