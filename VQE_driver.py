@@ -71,7 +71,7 @@ def array_to_Op(H):
     #print(pauli_vec)
     #print(len(pauli_vec))
     
-    H_op=PauliOp(Pauli(label='I'*m),0.0)
+    H_op=PauliOp(Pauli(label='I'*m), 0.0)
     #print(type(H_op))
     for pauli_string in pauli_vec.keys():
         coefficient = pauli_vec[pauli_string]
@@ -97,14 +97,11 @@ def array_to_SummedOp(Hmat, m):
     "Convert numpy matrix to SummedOp grouped into Pauli-string families."
     PO = Pauli_organizer(m)
     pauli_vec = to_pauli_vec(Hmat)
-    #pauli_vec['III'] = 0  # This is in Ben's code, but not Nouman's..
-    #pauli_vec['II'] = 0
-    #pauli_vec['IIII'] = 0
-    pauli_vec['IIIII'] = 0
     #print(pauli_vec)
     PO.input_pauli_decomps(pauli_vec)
     f = PO.calc_coefficients()
-    #print(f)
+    for fam in f:
+        print(fam.to_string())
 
     H = array_to_Op(Hmat)
     primitive = H.primitive
@@ -126,7 +123,6 @@ def array_to_SummedOp(Hmat, m):
     id_dict = { id_list[x]: x for x in range(len(id_list))}
     #print('id_dict:', id_dict)
     
-    # How is III treated everywhere? make sure you understand this in detail..
     res = []
     for family in f:
         #print(family.to_string())
@@ -134,6 +130,7 @@ def array_to_SummedOp(Hmat, m):
         for op in family.to_string():
             fam_ids.append(id_dict[op])
         res.append(fam_ids)
+    res[-1].append(0)  # Add the identity operator to the last family.
     #print('res:', res)
     
     result = SummedOp(
@@ -303,7 +300,7 @@ if __name__ == "__main__":
     #main()
     pr = cProfile.Profile()
     pr.enable()
-    main2(5)
+    main2(4)
     pr.disable()
     ps = pstats.Stats(pr).sort_stats('cumulative')
     ps.print_stats()

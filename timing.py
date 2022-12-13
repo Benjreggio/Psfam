@@ -7,6 +7,8 @@
 # + http://hoardedhomelyhints.dietbuddha.com/
 #   2012/12/52python-encapsulating-exceptions-with.html
 
+import cProfile
+import pstats
 import time
 from contextlib import contextmanager
 
@@ -17,3 +19,11 @@ def timing():
     end = time.time()
     print("Elapsed time:", end-start, "seconds.")
 
+@contextmanager
+def profile():
+    pr = cProfile.Profile()
+    pr.enable()
+    yield
+    pr.disable()
+    ps = pstats.Stats(pr).sort_stats('cumulative')
+    ps.print_stats()

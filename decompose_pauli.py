@@ -33,11 +33,8 @@ def to_pauli_vec(mat):
 
     for pauli_string in itertools.product(pauli_ops.keys(), repeat = num_qubits):
         # construct this pauli string as a matrix
-        if(pauli_string == ('I','I','I')):
-            continue
-        else: 
-         ops = [ pauli_ops[tag] for tag in pauli_string ]
-         op = functools.reduce(sp_kron_dok, ops)
+        ops = [ pauli_ops[tag] for tag in pauli_string ]
+        op = functools.reduce(sp_kron_dok, ops)
 
         # compute an inner product, same as tr(A @ B) but faster
         op_vec = op.reshape((1,4**num_qubits))
