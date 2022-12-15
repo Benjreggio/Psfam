@@ -19,6 +19,8 @@ import time
 #from statsmodels.stats.weightstats import DescrStatsW
 from math import log
 import logging
+logging.basicConfig(level=logging.INFO)
+
 import cProfile
 import pstats
 
@@ -34,10 +36,6 @@ from qiskit.algorithms import VQE
 from qiskit.algorithms.optimizers import SPSA,COBYLA
 from qiskit.circuit.library import TwoLocal,EfficientSU2
 from qiskit.opflow.converters import AbelianGrouper #, NewAbelianGrouper
-logger = logging.getLogger(__name__)
-fh = logging.FileHandler('vqe.log')
-fh.setLevel(logging.DEBUG)
-logger.addHandler(fh)
 #from qiskit.circuit.library import RealAmplitudes
 
 from qiskit.opflow.primitive_ops import PauliOp
