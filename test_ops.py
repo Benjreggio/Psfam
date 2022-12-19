@@ -24,7 +24,7 @@ from qiskit.algorithms import VQE
 from qiskit.algorithms.optimizers import SPSA,COBYLA
 from qiskit.circuit.library import TwoLocal,EfficientSU2
 from qiskit.opflow.converters import AbelianGrouper #, NewAbelianGrouper
-
+from qiskit.test.mock.backends import FakeCasablanca
 
 from qiskit.opflow import (StateFn, Zero, One, Plus, Minus, H,
                            DictStateFn, VectorStateFn, CircuitStateFn, OperatorStateFn)
@@ -65,14 +65,18 @@ def main():
         #    for _ in range(100):
         #        sf.eval(Zero^Zero^Zero^Zero^Zero)
         
-        backend=Aer.get_backend('aer_simulator')
+        #backend=Aer.get_backend('aer_simulator')
+        backend = FakeCasablanca()
         qi = QuantumInstance(backend, shots=1024)
         expectation = PauliExpectation().convert(sf.compose(Zero^Zero^Zero^Zero^Zero))
-        sampler = CircuitSampler(qi).convert(expectation)
-        print('RESULT:', sampler.eval())
         with profile():
-            for _ in range(100):
-                sampler.eval()
+            sampler = CircuitSampler(qi, attach_results=True).convert(expectation)
+        
+            print(f'sampler: {sampler}')
+            print('RESULT:', sampler.eval())
+        #with profile():
+        #    for _ in range(100):
+        #        print(sampler.eval())
 
     
     #CircuitSampler (CircuitStateFunc, Circuit Sampler)
@@ -90,14 +94,17 @@ def main():
         #    for _ in range(100):
         #        sf2.eval(Zero^Zero^Zero^Zero^Zero)
         
-        backend=Aer.get_backend('aer_simulator')
+        #backend=Aer.get_backend('aer_simulator')
+        backend = FakeCasablanca()
         qi = QuantumInstance(backend, shots=1024)
         expectation = PauliExpectation().convert(sf2.compose(Zero^Zero^Zero^Zero^Zero))
-        sampler = CircuitSampler(qi).convert(expectation)
-        print('RESULT:', sampler.eval())
         with profile():
-            for _ in range(100):
-                sampler.eval()
+            sampler = CircuitSampler(qi).convert(expectation)
+            print(f'sampler: {sampler}')
+            print('RESULT:', sampler.eval())
+        #with profile():
+        #    for _ in range(100):
+        #        sampler.eval()
 
    
 if __name__ == "__main__":

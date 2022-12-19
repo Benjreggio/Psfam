@@ -37,6 +37,7 @@ from qiskit.algorithms.optimizers import SPSA,COBYLA
 from qiskit.circuit.library import TwoLocal,EfficientSU2
 from qiskit.opflow.converters import AbelianGrouper #, NewAbelianGrouper
 #from qiskit.circuit.library import RealAmplitudes
+from qiskit.test.mock.backends import FakeCasablanca
 
 from qiskit.opflow.primitive_ops import PauliOp
 
@@ -98,8 +99,8 @@ def array_to_SummedOp(Hmat, m):
     #print(pauli_vec)
     PO.input_pauli_decomps(pauli_vec)
     f = PO.calc_coefficients()
-    for fam in f:
-        print(fam.to_string())
+    #for fam in f:
+    #    print(fam.to_string())
 
     H = array_to_Op(Hmat)
     primitive = H.primitive
@@ -144,7 +145,8 @@ def run_VQE(H):
     seed = (int) (10000*np.random.rand()) 
     iterations = 50
     algorithm_globals.random_seed = seed
-    backend = Aer.get_backend('aer_simulator')
+    #backend = Aer.get_backend('aer_simulator')
+    backend = FakeCasablanca()
     qi = QuantumInstance(backend=backend, shots=10000, seed_simulator=seed, seed_transpiler=seed)
 
     counts = []

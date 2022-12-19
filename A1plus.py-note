@@ -1,0 +1,5 @@
+Slack msg from Nouman Dec 07 2022:
+This builds the Hamiltonian for Femtouniverse in the A1+ sector. 
+You can import get_eigenvalues function. 
+Input parameters are M=8, lmax=20, nmax=10,flag =0, g you can choose 
+between 0.8-2.6. This function returns H as an array and eigenvalues
