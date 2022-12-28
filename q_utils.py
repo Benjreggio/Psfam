@@ -1,3 +1,6 @@
+import qiskit
+from qiskit import IBMQ
+
 def get_backend(name=False, simulator=True, n_qubits=2):
     provider = IBMQ.load_account()
     if name:
