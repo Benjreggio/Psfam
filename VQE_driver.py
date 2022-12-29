@@ -18,8 +18,8 @@ import pickle
 import time
 #from statsmodels.stats.weightstats import DescrStatsW
 from math import log
-import logging
-logging.basicConfig(level=logging.INFO)
+#import logging
+#logging.basicConfig(level=logging.INFO)
 
 import cProfile
 import pstats
@@ -37,7 +37,7 @@ from qiskit.algorithms.optimizers import SPSA,COBYLA
 from qiskit.circuit.library import TwoLocal,EfficientSU2
 from qiskit.opflow.converters import AbelianGrouper #, NewAbelianGrouper
 #from qiskit.circuit.library import RealAmplitudes
-from qiskit.test.mock.backends import FakeCasablanca
+from qiskit.providers.fake_provider import FakeCasablanca
 
 from qiskit.opflow.primitive_ops import PauliOp
 
@@ -46,36 +46,35 @@ from qiskit.quantum_info.operators import Pauli
 from qiskit.tools.visualization import circuit_drawer
 from qiskit import QuantumCircuit
 
-from rmatrix import random_H
-from timing import timing
-
-from Psfam import *
-
 #from qiskit.opflow.list_ops.list_op import ListOp
 from qiskit.opflow.list_ops.summed_op import SummedOp
 #from qiskit.opflow.operator_base import OperatorBase
 #from qiskit.opflow.primitive_ops.pauli_op import PauliOp
 from qiskit.opflow.primitive_ops.pauli_sum_op import PauliSumOp
 
+from rmatrix import random_H
+from timing import timing
+from Psfam import Pauli_organizer
+from q_utils import get_backend
 
-def array_to_Op(H):
+def array_to_Op(Hmat):
     "Convert numpy matrix to qiskit Operator type object."
-    
-    N = H.shape[0]
+
+    N = Hmat.shape[0]
     m = log(N, 2)
     assert m == int(m)
     m = int(m)
 
-    pauli_vec = to_pauli_vec(H)
+    pauli_vec = to_pauli_vec(Hmat)
     #print(pauli_vec)
     #print(len(pauli_vec))
     
-    H_op=PauliOp(Pauli(label='I'*m), 0.0)
+    H_op=PauliOp(Pauli('I'*m), 0.0)
     #print(type(H_op))
     for pauli_string in pauli_vec.keys():
         coefficient = pauli_vec[pauli_string]
         #if(abs(coefficient) > 0.0001 ):
-        H_op += PauliOp(Pauli(label=pauli_string),coefficient)
+        H_op += PauliOp(Pauli(pauli_string), coefficient)
     #print(type(H_op))
     return H_op
 
@@ -92,8 +91,13 @@ def test_ben():
     print('result:', result)
     print('len(result):', len(result))
 
-def array_to_SummedOp(Hmat, m):
+def array_to_SummedOp(Hmat):
     "Convert numpy matrix to SummedOp grouped into Pauli-string families."
+    N = Hmat.shape[0]
+    m = log(N, 2)
+    assert m == int(m)
+    m = int(m)
+
     PO = Pauli_organizer(m)
     pauli_vec = to_pauli_vec(Hmat)
     #print(pauli_vec)
@@ -141,13 +145,13 @@ def array_to_SummedOp(Hmat, m):
 
     return result
 
-def run_VQE(H):
+def run_VQE(H, niters, nshots, backend):
     seed = (int) (10000*np.random.rand()) 
-    iterations = 50
+    iterations = niters
     algorithm_globals.random_seed = seed
     #backend = Aer.get_backend('aer_simulator')
-    backend = FakeCasablanca()
-    qi = QuantumInstance(backend=backend, shots=10000, seed_simulator=seed, seed_transpiler=seed)
+    #backend = FakeCasablanca()
+    qi = QuantumInstance(backend=backend, shots=nshots, seed_simulator=seed, seed_transpiler=seed)
 
     counts = []
     values = []
@@ -173,50 +177,68 @@ def run_VQE(H):
 
     return result
 
-def main2(m):
-    run_naive = False
-    run_abelian = False
-    run_new = True
+def get_Op(Hmat, optype):
+    "Qiskit operators from matrix array."
+    if optype == 'naive':
+        return array_to_Op(Hmat)
+    elif optype == 'abelian':
+        grouper = AbelianGrouper()
+        H = array_to_Op(Hmat)
+        return grouper.convert(H)
+    elif optype == 'new':
+        return array_to_SummedOp(Hmat)
+    else:
+        msg = f'optype {optype} not recognized [naive, abelian, new].'
+        raise ValueError(msg)
 
+def get_vqe_backend(name):
+    "Wrapper for obtaining quantum backend."
+    if name == 'FakeCasablanca':
+        return FakeCasablanca()
+    elif name == 'aer_simulator':
+        return Aer.get_backend('aer_simulator')
+    elif name == "qasm_simulator":
+        return get_backend(simulator=True)
+    elif name == 'ibmq_quito':
+        return get_backend(name='ibmq_quito')
+    else:
+        msg = f'Backend name {name} not recognized' 
+        msg += ' [FakeCasablanca, aer_simulator, qasm_simulator, ibmq_quito]'
+        raise ValueError(msg)
+
+def main2(m, optype, niters, nshots, name):
     N = 2**m
     Hmat = random_H(N)
     
-    evals,evec = np.linalg.eigh(Hmat)
+    evals, evec = np.linalg.eigh(Hmat)
     ref_value=evals[0]
-    print("Exact value: ",evals[0])
+    print(f"Exact value: {evals[0]}")
     
-    H = array_to_Op(Hmat)
-   
-    if run_naive:
-        print('type(H):', type(H))
-        print('# of families:', len(H))
-        with timing():
-            result = run_VQE(H)
+    H = get_Op(Hmat, optype)
+    backend = get_vqe_backend(name)
+    print(f'#### VQE using optype: {optype}, using backend: {name}  ####')
+    print('type(H):', type(H))
+    print('# of families:', len(H))
+    with timing():
+        result = run_VQE(H, niters, nshots, backend)
+    #H = array_to_Op(Hmat)
+    print(f'VQE on aer simulator (no noise): {result.eigenvalue.real:.5f}')
+    #print(f'Std Dev of VQE value: {devs[-1]:.5f}')
+    print(f'Delta from reference energy value is {(result.eigenvalue.real - ref_value):.5f}')
     
-    
-    if run_abelian:
-        print('#### VQE using AbelianGrouper ####')
-        grouper = AbelianGrouper()
-        H = grouper.convert(H)
-        print('type(H):', type(H))
-        print('# of families:', len(H))
-        with timing():
-            result = run_VQE(H)
-        print(f'VQE on aer simulator (no noise): {result.eigenvalue.real:.5f}')
-        #print(f'Std Dev of VQE value: {devs[-1]:.5f}')
-        print(f'Delta from reference energy value is {(result.eigenvalue.real - ref_value):.5f}')
-    
-    
-    if run_new:
-        print('\n\n#### VQE using NewAbelianGrouper ####')
-        H = array_to_SummedOp(Hmat, m)
-        print('type(H):', type(H))
-        print('# of families:', len(H))
-        with timing():
-            result = run_VQE(H)
-        print(f'VQE on aer simulator (no noise): {result.eigenvalue.real:.5f}')
-        print(f'Delta from reference energy value is {(result.eigenvalue.real - ref_value):.5f}')
-   
+
+if __name__ == "__main__":
+    main2(5, 'new', 2, 1000, 'ibmq_quito')
+    #main2(6, 'naive', 10, 1000, 'qasm_simulator')
+    #print()
+    #main2(6, 'naive', 10, 1000, 'aer_simulator')
+    #print()
+    #main2(3, 'naive', 10, 1000, 'FakeCasablanca')
+    #main2(6, 'abelian', 10, 1000)
+    #print()
+    #main2(6, 'new', 10, 1000)
+
+    #test_ben()
 
 def main():
     iters=2
@@ -293,16 +315,4 @@ def main():
         print(f'VQE on aer simulator (no noise): {result.eigenvalue.real:.5f}')
         print(f'Std Dev of VQE value: {devs[-1]:.5f}')
         print(f'Delta from reference energy value is {(result.eigenvalue.real - ref_value):.5f}')
-
-
-
-if __name__ == "__main__":
-    #main()
-    pr = cProfile.Profile()
-    pr.enable()
-    main2(4)
-    pr.disable()
-    ps = pstats.Stats(pr).sort_stats('cumulative')
-    ps.print_stats()
-    #test_ben()
 
