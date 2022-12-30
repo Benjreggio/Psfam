@@ -1,5 +1,7 @@
 import qiskit
 from qiskit import IBMQ
+from qiskit import Aer
+from qiskit.providers.fake_provider import FakeCasablanca
 
 def get_backend(name=False, simulator=True, n_qubits=2):
     provider = IBMQ.load_account()
@@ -16,3 +18,18 @@ def get_backend(name=False, simulator=True, n_qubits=2):
         backend = _least_busy(backends)
         print('Using least busy device:', backend.name())
         return backend
+
+def get_backend_wrapper(name):
+    "Wrapper for obtaining quantum backend."
+    if name == 'FakeCasablanca':
+        return FakeCasablanca()
+    elif name == 'aer_simulator':
+        return Aer.get_backend('aer_simulator')
+    elif name == "qasm_simulator":
+        return get_backend(simulator=True)
+    elif name == 'ibmq_quito':
+        return get_backend(name='ibmq_quito')
+    else:
+        msg = f'Backend name {name} not recognized' 
+        msg += ' [FakeCasablanca, aer_simulator, qasm_simulator, ibmq_quito]'
+        raise ValueError(msg)

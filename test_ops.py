@@ -2,64 +2,75 @@
 # Andrew Lytle
 # Dec 2022
 
-#import numpy as np
 import pickle
 import time
 #from statsmodels.stats.weightstats import DescrStatsW
 from math import log
-import logging
-log = logging.getLogger(__name__)
+#import logging
+#log = logging.getLogger(__name__)
 import cProfile
 import pstats
 
+import numpy as np
 import scipy.sparse as sp
 
-from decompose_pauli import to_pauli_vec
-import numpy as np
 #from e1plus import get_eigenvalues
 from qiskit import Aer
 import matplotlib.pyplot as plt
 from qiskit.utils import QuantumInstance, algorithm_globals
-from qiskit.algorithms import VQE
-from qiskit.algorithms.optimizers import SPSA,COBYLA
-from qiskit.circuit.library import TwoLocal,EfficientSU2
-from qiskit.opflow.converters import AbelianGrouper #, NewAbelianGrouper
-from qiskit.test.mock.backends import FakeCasablanca
+#from qiskit.circuit.library import TwoLocal,EfficientSU2
+#from qiskit.opflow.converters import AbelianGrouper #, NewAbelianGrouper
+#from qiskit.providers.fake_provider import FakeCasablanca
 
 from qiskit.opflow import (StateFn, Zero, One, Plus, Minus, H,
                            DictStateFn, VectorStateFn, CircuitStateFn, OperatorStateFn)
-from qiskit.circuit.library import RealAmplitudes
+#from qiskit.circuit.library import RealAmplitudes
 from qiskit.opflow import X, Y, Z, I, CX, T, H, S, PrimitiveOp
 from qiskit.opflow import (I, X, Y, Z, H, CX, Zero, ListOp, PauliExpectation, 
                            PauliTrotterEvolution, CircuitSampler, MatrixEvolution, 
                            Suzuki)
-from qiskit.circuit import Parameter
+#from qiskit.circuit import Parameter
 
-
-from rmatrix import random_H
+from q_utils import get_backend_wrapper as get_backend
+from rmatrix import random_H, get_Op
 from timing import profile
-from VQE_driver import array_to_Op, array_to_SummedOp
+#from VQE_driver import array_to_Op, array_to_SummedOp
     
-def main():
-    run_new = False
-    run_abelian = True
-
-    m = 5
+def main(m, optype, name, nshots):
+    #run_new = False
+    #run_abelian = True
 
     N = 2**m
     Hmat = random_H(N)
-    log.info(Hmat)
+    print(Hmat)
 
-    evals,evec = np.linalg.eigh(Hmat)
-    ref_value=evals[0]
-    log.info(f"Exact value: {evals[0]}")
+    #evals,evec = np.linalg.eigh(Hmat)
+    #ref_value=evals[0]
+    #print(f"Exact value: {evals[0]}")
 
+    H = get_Op(Hmat, optype)
+    print(f"optype: {optype}")
+    sf = StateFn(H)
+    sf = sf.adjoint()
+    state = (Zero^m)  # |0>**m
+    _eval = sf.eval(state)
+    print(f"Direct evaluation: {_eval}")
+
+    print(f"Using backend {name}")
+    backend = get_backend(name)
+    qi = QuantumInstance(backend, shots=nshots)
+    expectation = PauliExpectation().convert(sf.compose(state))
+    sampler = CircuitSampler(qi, attach_results=True).convert(expectation)
+    #print(f'sampler: {sampler}')
+    print('RESULT:', sampler.eval())
+
+    '''
     if run_new: 
         H = array_to_SummedOp(Hmat, m)
-        log.info(H)
+        print(H)
         sf = StateFn(H)
-        log.info('Summed op eval:')
-        log.info(sf.adjoint().eval(Zero^Zero^Zero^Zero^Zero))
+        print('Summed op eval:')
+        print(sf.adjoint().eval(Zero^Zero^Zero^Zero^Zero))
         sf = sf.adjoint()
         #with profile():
         #    for _ in range(100):
@@ -86,9 +97,9 @@ def main():
         grouper = AbelianGrouper()
         H = grouper.convert(H)
         sf2 = StateFn(H)
-        log.debug(sf2.adjoint())
-        log.info('abelian eval:')
-        log.info(sf2.adjoint().eval(Zero^Zero^Zero^Zero^Zero))
+        print(sf2.adjoint())
+        print('abelian eval:')
+        print(sf2.adjoint().eval(Zero^Zero^Zero^Zero^Zero))
         sf2 = sf2.adjoint()
         #with profile(): 
         #    for _ in range(100):
@@ -105,7 +116,9 @@ def main():
         #with profile():
         #    for _ in range(100):
         #        sampler.eval()
-
+    '''
    
 if __name__ == "__main__":
-    main()
+    #main(5, 'new', 'aer_simulator', 1024)
+    main(5, 'new', 'FakeCasablanca', 10024)
+
